@@ -104,6 +104,7 @@ impl Db {
         Ok(None)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn insert_climb(
         &self,
         lat: f64,
