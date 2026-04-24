@@ -1,0 +1,23 @@
+services:
+  col:
+    build: .
+    image: col_gpx:latest
+    container_name: col_gpx
+    ports:
+      - "9017:3000"
+    environment:
+      PORT: "3000"
+      DB_PATH: "/app/data/col.db"
+      RUST_LOG: "info,col_gpx=debug"
+    volumes:
+      - col_data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  col_data:
