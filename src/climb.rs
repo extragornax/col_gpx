@@ -15,7 +15,8 @@ pub struct DetectedClimb {
 pub type ProfilePoint = (f64, f64, f64, f64);
 
 /// Detect climbs from a resampled elevation profile.
-/// Algorithm ported from gpx_to_graph.
+/// `min_gain`: minimum elevation gain in meters (e.g. 50).
+/// Climbs below 1% average gradient are filtered out (river valleys, not real climbs).
 pub fn detect_climbs(profile: &[ProfilePoint], min_gain: f64) -> Vec<DetectedClimb> {
     if profile.len() < 2 {
         return Vec::new();
@@ -112,15 +113,30 @@ pub fn detect_climbs(profile: &[ProfilePoint], min_gain: f64) -> Vec<DetectedCli
         }
     }
 
+    climbs.retain(|c| c.gradient >= 1.0);
     climbs
 }
 
-/// Build a profile from GPX XML: returns (distance_km, elevation, lat, lon) points.
-pub fn profile_from_gpx(xml: &[u8]) -> anyhow::Result<Vec<ProfilePoint>> {
+pub struct GpxProfile {
+    pub points: Vec<ProfilePoint>,
+    pub date: Option<String>,
+}
+
+/// Build a profile from GPX XML, also extracting the activity date from metadata or the first trackpoint.
+pub fn profile_from_gpx(xml: &[u8]) -> anyhow::Result<GpxProfile> {
     let gpx = gpx::read(xml)?;
     let mut points = Vec::new();
     let mut total_dist = 0.0_f64;
     let mut prev: Option<(f64, f64)> = None;
+    let mut first_time: Option<String> = None;
+
+    if let Some(ref meta) = gpx.metadata {
+        if let Some(ref t) = meta.time {
+            if let Ok(s) = t.format() {
+                first_time = Some(s[..10].to_string());
+            }
+        }
+    }
 
     for track in &gpx.tracks {
         for segment in &track.segments {
@@ -128,6 +144,14 @@ pub fn profile_from_gpx(xml: &[u8]) -> anyhow::Result<Vec<ProfilePoint>> {
                 let lat = pt.point().y();
                 let lon = pt.point().x();
                 let ele = pt.elevation.unwrap_or(0.0);
+
+                if first_time.is_none() {
+                    if let Some(ref t) = pt.time {
+                        if let Ok(s) = t.format() {
+                            first_time = Some(s[..10].to_string());
+                        }
+                    }
+                }
 
                 if let Some((plat, plon)) = prev {
                     total_dist += haversine_km(plat, plon, lat, lon);
@@ -137,7 +161,7 @@ pub fn profile_from_gpx(xml: &[u8]) -> anyhow::Result<Vec<ProfilePoint>> {
             }
         }
     }
-    Ok(points)
+    Ok(GpxProfile { points, date: first_time })
 }
 
 fn resample(profile: &[ProfilePoint], step_km: f64) -> Vec<ProfilePoint> {

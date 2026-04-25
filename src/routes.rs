@@ -16,8 +16,8 @@ pub fn router() -> Router<SharedState> {
         .route("/api/upload/gpx", post(upload_gpx))
         .route("/api/upload/strava-csv", post(upload_strava_csv))
         .route("/api/climbs", get(list_climbs))
-        .route("/api/climbs/{id}", get(get_climb))
-        .route("/api/climbs/{id}/name", put(rename_climb))
+        .route("/api/climbs/:id", get(get_climb))
+        .route("/api/climbs/:id/name", put(rename_climb))
         .route("/api/stats", get(get_stats))
         .route("/api/reset", post(reset_data))
 }
@@ -33,12 +33,14 @@ async fn upload_gpx(
     let mut total_climbs = 0usize;
 
     while let Some(field) = multipart.next_field().await.map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))? {
+        let file_name = field.file_name().map(|s| s.to_string());
         let data = field.bytes().await.map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
 
-        let profile = climb::profile_from_gpx(&data)
+        let gpx_profile = climb::profile_from_gpx(&data)
             .map_err(|e| (StatusCode::BAD_REQUEST, format!("GPX parse error: {e}")))?;
 
-        let detected = climb::detect_climbs(&profile, 50.0);
+        let date = gpx_profile.date.as_deref().unwrap_or("unknown");
+        let detected = climb::detect_climbs(&gpx_profile.points, 50.0);
 
         for c in &detected {
             let existing = state.db.find_nearby_climb(c.lat, c.lon, 0.5)
@@ -48,11 +50,11 @@ async fn upload_gpx(
                 Some(id) => id,
                 None => state.db.insert_climb(
                     c.lat, c.lon, c.start_ele, c.end_ele, c.gain,
-                    c.end_km - c.start_km, c.gradient, "unknown",
+                    c.end_km - c.start_km, c.gradient, date,
                 ).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?,
             };
 
-            state.db.add_attempt(climb_id, "unknown", None, None)
+            state.db.add_attempt(climb_id, date, file_name.as_deref(), None)
                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
             total_climbs += 1;
@@ -115,12 +117,17 @@ async fn upload_strava_csv(
     };
 
     for (date, activity_name, gpx_data) in &files_to_process {
-        let profile = match climb::profile_from_gpx(gpx_data) {
+        let gpx_profile = match climb::profile_from_gpx(gpx_data) {
             Ok(p) => p,
             Err(_) => continue,
         };
 
-        let detected = climb::detect_climbs(&profile, 50.0);
+        let date = if date == "unknown" {
+            gpx_profile.date.as_deref().unwrap_or("unknown")
+        } else {
+            date.as_str()
+        };
+        let detected = climb::detect_climbs(&gpx_profile.points, 50.0);
         activities_processed += 1;
 
         for c in &detected {

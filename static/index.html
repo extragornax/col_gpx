@@ -52,12 +52,14 @@
   .climb-row { display:grid; grid-template-columns:1fr auto auto; gap:8px; padding:10px 14px; border-bottom:1px solid var(--rule); cursor:pointer; transition:background .15s; align-items:baseline; }
   .climb-row:hover { background:rgba(217,163,38,.15); }
   .climb-row .name { font-family:"Bricolage Grotesque",sans-serif; font-weight:700; font-size:15px; }
+  .climb-row .date { font-family:"Space Mono",monospace; font-size:10px; color:var(--ink-soft); }
   .climb-row .info { font-family:"Space Mono",monospace; font-size:11px; color:var(--ink-soft); white-space:nowrap; }
   .climb-row .badge { font-family:"Space Mono",monospace; font-size:11px; background:var(--ink); color:var(--paper); padding:2px 6px; }
   .empty { padding:40px 20px; text-align:center; color:var(--ink-soft); }
 
   /* ── upload ── */
-  .upload { margin-top:24px; border:2px dashed var(--rule); padding:28px; text-align:center; transition:border-color .2s; }
+  .actions { margin-top:24px; display:flex; gap:16px; flex-wrap:wrap; align-items:flex-start; }
+  .upload { flex:1 1 400px; border:2px dashed var(--rule); padding:28px; text-align:center; transition:border-color .2s; }
   .upload.drag { border-color:var(--vermilion); }
   .upload h3 { font-family:"Bricolage Grotesque",sans-serif; font-size:20px; margin:0 0 8px; }
   .upload p { color:var(--ink-soft); margin:0 0 14px; font-size:14px; }
@@ -66,6 +68,7 @@
     padding:10px 20px; border:1px solid var(--ink); background:var(--mustard); color:var(--ink); cursor:pointer; transition:transform .15s,box-shadow .15s; }
   .btn:hover { transform:translate(-2px,-2px); box-shadow:4px 4px 0 var(--ink); }
   .btn.danger { background:var(--vermilion); color:var(--paper); border-color:var(--vermilion); }
+  .btn.small { padding:6px 12px; font-size:10px; }
   .upload-status { margin-top:12px; font-family:"Space Mono",monospace; font-size:12px; color:var(--teal); }
 
   /* ── sort controls ── */
@@ -73,6 +76,13 @@
   .sort-btn { font-family:"Space Mono",monospace; font-size:10px; letter-spacing:.08em; text-transform:uppercase;
     padding:3px 8px; border:1px solid var(--ink); background:var(--paper); cursor:pointer; color:var(--ink); }
   .sort-btn.active { background:var(--ink); color:var(--paper); }
+
+  /* ── rename dialog ── */
+  .rename-overlay { position:fixed; inset:0; background:rgba(14,20,36,.5); z-index:100; display:flex; align-items:center; justify-content:center; }
+  .rename-box { background:var(--paper); border:1px solid var(--ink); padding:24px; max-width:400px; width:90%; }
+  .rename-box h3 { font-family:"Bricolage Grotesque",sans-serif; margin:0 0 12px; font-size:18px; }
+  .rename-box input { width:100%; font-family:"Space Mono",monospace; font-size:14px; padding:8px 10px; border:1px solid var(--ink); background:var(--paper-2); margin-bottom:12px; }
+  .rename-box .btns { display:flex; gap:8px; justify-content:flex-end; }
 </style>
 </head>
 <body>
@@ -107,14 +117,19 @@
     </div>
   </div>
 
-  <div class="upload" id="drop-zone">
-    <h3>Add rides</h3>
-    <p>Drop GPX files here, or click to pick. Each file is scanned for climbs (≥ 50 m gain).</p>
-    <label class="btn">
-      Choose GPX files
-      <input type="file" id="file-input" accept=".gpx" multiple>
-    </label>
-    <div class="upload-status" id="upload-status"></div>
+  <div class="actions">
+    <div class="upload" id="drop-zone">
+      <h3>Add rides</h3>
+      <p>Drop GPX files here, or click to pick. Each file is scanned for climbs (≥ 50 m gain, ≥ 1% avg gradient).</p>
+      <label class="btn">
+        Choose GPX files
+        <input type="file" id="file-input" accept=".gpx" multiple>
+      </label>
+      <div class="upload-status" id="upload-status"></div>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      <button class="btn danger small" id="reset-btn">Reset all data</button>
+    </div>
   </div>
 
 </div>
@@ -122,7 +137,7 @@
 <script>
 const map = L.map('map').setView([46.8, 2.3], 6);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '© OpenStreetMap',
+  attribution: '&copy; OpenStreetMap',
   maxZoom: 18,
 }).addTo(map);
 
@@ -155,13 +170,18 @@ function renderClimbs() {
   else if (currentSort === 'times') sorted.sort((a,b) => b.times_ridden - a.times_ridden);
   else if (currentSort === 'name') sorted.sort((a,b) => climbLabel(a).localeCompare(climbLabel(b)));
 
-  list.innerHTML = sorted.map(c => `
+  list.innerHTML = sorted.map(c => {
+    const dateStr = c.first_ridden && c.first_ridden !== 'unknown' ? c.first_ridden : '';
+    return `
     <div class="climb-row" data-id="${c.id}" data-lat="${c.lat}" data-lon="${c.lon}">
-      <span class="name">${climbLabel(c)}</span>
+      <div>
+        <span class="name">${climbLabel(c)}</span>
+        ${dateStr ? `<div class="date">${dateStr}</div>` : ''}
+      </div>
       <span class="info">${fmt(c.gain,0)} m · ${fmt(c.gradient,1)}% · ${fmt(c.distance_km,1)} km</span>
       <span class="badge">${c.times_ridden}×</span>
     </div>
-  `).join('');
+  `}).join('');
 
   const bounds = [];
   sorted.forEach(c => {
@@ -170,7 +190,7 @@ function renderClimbs() {
       radius: Math.min(4 + c.times_ridden * 2, 14),
       color, fillColor: color, fillOpacity: 0.7, weight: 1,
     }).addTo(markers);
-    m.bindPopup(`<b>${climbLabel(c)}</b><br>${fmt(c.gain,0)} m D+ · ${fmt(c.gradient,1)}% · ${fmt(c.distance_km,1)} km<br>${c.times_ridden} attempt${c.times_ridden>1?'s':''}`);
+    m.bindPopup(`<b>${climbLabel(c)}</b><br>${fmt(c.gain,0)} m D+ · ${fmt(c.gradient,1)}% · ${fmt(c.distance_km,1)} km<br>${c.times_ridden} attempt${c.times_ridden>1?'s':''}<br><small>${c.first_ridden || ''}</small>`);
     bounds.push([c.lat, c.lon]);
   });
 
@@ -210,6 +230,55 @@ document.getElementById('climb-list').addEventListener('click', e => {
   map.flyTo([+row.dataset.lat, +row.dataset.lon], 13, { duration: 0.8 });
 });
 
+// Double-click climb row → rename
+document.getElementById('climb-list').addEventListener('dblclick', e => {
+  const row = e.target.closest('.climb-row');
+  if (!row) return;
+  const id = row.dataset.id;
+  const climb = climbs.find(c => c.id === +id);
+  if (!climb) return;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'rename-overlay';
+  overlay.innerHTML = `
+    <div class="rename-box">
+      <h3>Rename climb</h3>
+      <input type="text" id="rename-input" value="${(climb.name || '').replace(/"/g, '&quot;')}" placeholder="e.g. Col de la Madeleine">
+      <div class="btns">
+        <button class="btn small" id="rename-cancel">Cancel</button>
+        <button class="btn small" id="rename-save">Save</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const input = document.getElementById('rename-input');
+  input.focus();
+  input.select();
+
+  async function save() {
+    const name = input.value.trim();
+    if (!name) return;
+    const res = await fetch(`/api/climbs/${id}/name`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    if (res.ok) {
+      climb.name = name;
+      renderClimbs();
+    }
+    overlay.remove();
+  }
+
+  document.getElementById('rename-save').addEventListener('click', save);
+  document.getElementById('rename-cancel').addEventListener('click', () => overlay.remove());
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') save();
+    if (e.key === 'Escape') overlay.remove();
+  });
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+});
+
 // Upload
 const dropZone = document.getElementById('drop-zone');
 const fileInput = document.getElementById('file-input');
@@ -238,6 +307,18 @@ async function handleFiles(files) {
   }
   fileInput.value = '';
 }
+
+// Reset
+document.getElementById('reset-btn').addEventListener('click', async () => {
+  if (!confirm('Delete all climbs and attempts? This cannot be undone.')) return;
+  const res = await fetch('/api/reset', { method: 'POST' });
+  if (res.ok) {
+    climbs = [];
+    renderClimbs();
+    renderStats({ total_climbs: 0, total_attempts: 0, total_gain_m: 0, highest_climb_m: 0, steepest_gradient: 0 });
+    document.getElementById('upload-status').textContent = 'All data cleared.';
+  }
+});
 
 loadData();
 </script>
