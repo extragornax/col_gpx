@@ -7,10 +7,10 @@ services:
       - "9017:3000"
     environment:
       PORT: "3000"
-      DB_PATH: "/app/data/col.db"
+      DB_PATH: "/data/col.db"
       RUST_LOG: "info,col_gpx=debug"
     volumes:
-      - col_data:/app/data
+      - col_data:/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/"]

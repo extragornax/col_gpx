@@ -8,6 +8,7 @@ RUN cargo build --release
 FROM debian:12-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates wget && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
+RUN mkdir -p /data
 COPY --from=builder /build/target/release/col_gpx .
 COPY static/ static/
 EXPOSE 3000
