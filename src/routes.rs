@@ -20,6 +20,7 @@ pub fn router() -> Router<SharedState> {
         .route("/api/login", post(login))
         .route("/api/logout", post(logout))
         .route("/api/me", get(me))
+        .route("/api/share-id", post(regenerate_share_link))
         // Climbs (protected)
         .route("/api/upload/gpx", post(upload_gpx))
         .route("/api/climbs", get(list_climbs))
@@ -37,9 +38,9 @@ pub fn router() -> Router<SharedState> {
         .route("/webhook/strava", get(strava_webhook_verify))
         .route("/webhook/strava", post(strava_webhook_event))
         // Public profile
-        .route("/p/:username", get(public_profile))
-        .route("/api/public/:username/climbs", get(public_climbs))
-        .route("/api/public/:username/stats", get(public_stats))
+        .route("/p/:share_id", get(public_profile))
+        .route("/api/public/:share_id/climbs", get(public_climbs))
+        .route("/api/public/:share_id/stats", get(public_stats))
 }
 
 async fn page_index() -> Html<&'static str> {
@@ -66,12 +67,13 @@ async fn register(
     }
 
     let hash = auth::hash_password(&body.password).map_err(err500)?;
-    let user_id = state.db.create_user(&body.username, &hash).map_err(err500)?;
+    let share_id = auth::generate_share_id();
+    let user_id = state.db.create_user(&body.username, &hash, &share_id).map_err(err500)?;
 
     let token = auth::generate_session_token();
     state.db.create_session(&token, user_id).map_err(err500)?;
 
-    Ok((StatusCode::CREATED, session_headers(&token), Json(serde_json::json!({ "username": body.username }))))
+    Ok((StatusCode::CREATED, session_headers(&token), Json(serde_json::json!({ "username": body.username, "share_id": share_id }))))
 }
 
 async fn login(
@@ -110,7 +112,18 @@ async fn me(
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     let (_, username) = state.db.get_user_by_id(user.0).map_err(err500)?
         .ok_or((StatusCode::UNAUTHORIZED, "User not found".into()))?;
-    Ok(Json(serde_json::json!({ "username": username })))
+    let share_id = state.db.get_share_id(user.0).map_err(err500)?
+        .ok_or((StatusCode::UNAUTHORIZED, "User not found".into()))?;
+    Ok(Json(serde_json::json!({ "username": username, "share_id": share_id })))
+}
+
+async fn regenerate_share_link(
+    State(state): State<SharedState>,
+    user: CurrentUser,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let new_id = auth::generate_share_id();
+    state.db.regenerate_share_id(user.0, &new_id).map_err(err500)?;
+    Ok(Json(serde_json::json!({ "share_id": new_id })))
 }
 
 fn session_headers(token: &str) -> HeaderMap {
@@ -465,19 +478,19 @@ async fn public_profile() -> Html<&'static str> {
 
 async fn public_climbs(
     State(state): State<SharedState>,
-    Path(username): Path<String>,
+    Path(share_id): Path<String>,
 ) -> Result<Json<Vec<crate::db::ClimbRecord>>, (StatusCode, String)> {
-    let (user_id, _) = state.db.get_user_by_username(&username).map_err(err500)?
-        .ok_or((StatusCode::NOT_FOUND, "User not found".into()))?;
+    let user_id = state.db.get_user_by_share_id(&share_id).map_err(err500)?
+        .ok_or((StatusCode::NOT_FOUND, "Not found".into()))?;
     state.db.get_climbs(user_id).map(Json).map_err(err500)
 }
 
 async fn public_stats(
     State(state): State<SharedState>,
-    Path(username): Path<String>,
+    Path(share_id): Path<String>,
 ) -> Result<Json<crate::db::Stats>, (StatusCode, String)> {
-    let (user_id, _) = state.db.get_user_by_username(&username).map_err(err500)?
-        .ok_or((StatusCode::NOT_FOUND, "User not found".into()))?;
+    let user_id = state.db.get_user_by_share_id(&share_id).map_err(err500)?
+        .ok_or((StatusCode::NOT_FOUND, "Not found".into()))?;
     state.db.get_stats(user_id).map(Json).map_err(err500)
 }
 

@@ -199,7 +199,7 @@ const $$ = s => document.querySelectorAll(s);
 
 // Detect public profile mode from URL
 const publicMatch = location.pathname.match(/^\/p\/([^/]+)$/);
-const publicUsername = publicMatch ? decodeURIComponent(publicMatch[1]) : null;
+const publicShareId = publicMatch ? decodeURIComponent(publicMatch[1]) : null;
 
 // ── Auth ──
 
@@ -232,7 +232,7 @@ $('#auth-form').addEventListener('submit', async e => {
 
   if (res.ok) {
     const data = await res.json();
-    showApp(data.username);
+    showApp(data.username, data.share_id);
   } else {
     errEl.textContent = await res.text();
     errEl.classList.remove('hidden');
@@ -243,30 +243,47 @@ async function checkSession() {
   const res = await fetch('/api/me');
   if (res.ok) {
     const data = await res.json();
-    showApp(data.username);
+    showApp(data.username, data.share_id);
   } else {
     $('#auth-gate').classList.remove('hidden');
     $('#app').classList.add('hidden');
   }
 }
 
-function showApp(username) {
+let currentShareId = null;
+
+function shareUrl() {
+  return `${location.origin}/p/${currentShareId}`;
+}
+
+function showApp(username, shareId) {
   currentUser = username;
+  currentShareId = shareId;
   $('#auth-gate').classList.add('hidden');
   $('#app').classList.remove('hidden');
-  const shareUrl = `${location.origin}/p/${encodeURIComponent(username)}`;
   $('#hdr-right').innerHTML = `
     <span class="user-info">
       <span>${username}</span>
-      <button class="btn small" id="share-btn" title="${shareUrl}">Share link</button>
+      <button class="btn small" id="share-btn" title="Copy public link">Share link</button>
+      <button class="btn small" id="new-link-btn" title="Generate a new share link (invalidates the old one)">New link</button>
       <button class="btn small" id="logout-btn">Logout</button>
     </span>
   `;
   $('#share-btn').addEventListener('click', () => {
-    navigator.clipboard.writeText(shareUrl).then(() => {
+    navigator.clipboard.writeText(shareUrl()).then(() => {
       $('#share-btn').textContent = 'Copied!';
       setTimeout(() => { $('#share-btn').textContent = 'Share link'; }, 2000);
     });
+  });
+  $('#new-link-btn').addEventListener('click', async () => {
+    if (!confirm('Generate a new share link? The old one will stop working.')) return;
+    const res = await fetch('/api/share-id', { method: 'POST' });
+    if (res.ok) {
+      const data = await res.json();
+      currentShareId = data.share_id;
+      $('#new-link-btn').textContent = 'Done!';
+      setTimeout(() => { $('#new-link-btn').textContent = 'New link'; }, 2000);
+    }
   });
   $('#logout-btn').addEventListener('click', async () => {
     await fetch('/api/logout', { method: 'POST' });
@@ -277,13 +294,12 @@ function showApp(username) {
   loadStrava();
 }
 
-function showPublicProfile(username) {
+function showPublicProfile() {
   $('#auth-gate').classList.add('hidden');
   $('#app').classList.remove('hidden');
   $('#hdr-right').innerHTML = `
-    <span class="sub">${username}'s climbs</span>
+    <span class="sub">climb catalog</span>
   `;
-  // Hide owner-only controls
   const actions = document.querySelector('.actions');
   if (actions) actions.style.display = 'none';
   const stravaSection = $('#strava-section');
@@ -367,7 +383,7 @@ function renderStats(s) {
 }
 
 async function loadData() {
-  const base = publicUsername ? `/api/public/${encodeURIComponent(publicUsername)}` : '/api';
+  const base = publicShareId ? `/api/public/${encodeURIComponent(publicShareId)}` : '/api';
   const [climbRes, statsRes] = await Promise.all([
     fetch(`${base}/climbs`), fetch(`${base}/stats`)
   ]);
@@ -394,7 +410,7 @@ $('#climb-list').addEventListener('click', e => {
 
 // Double-click climb row -> rename (owner only)
 $('#climb-list').addEventListener('dblclick', e => {
-  if (publicUsername) return;
+  if (publicShareId) return;
   const row = e.target.closest('.climb-row');
   if (!row) return;
   const id = row.dataset.id;
@@ -532,8 +548,8 @@ async function disconnectStrava() {
 }
 
 // Boot
-if (publicUsername) {
-  showPublicProfile(publicUsername);
+if (publicShareId) {
+  showPublicProfile();
 } else {
   checkSession();
 }

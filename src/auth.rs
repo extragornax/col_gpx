@@ -46,3 +46,9 @@ pub fn generate_session_token() -> String {
     let bytes: [u8; 32] = rand::rng().random();
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
+
+pub fn generate_share_id() -> String {
+    use rand::Rng;
+    let bytes: [u8; 8] = rand::rng().random();
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}

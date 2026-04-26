@@ -63,6 +63,7 @@ impl Db {
                 id            INTEGER PRIMARY KEY AUTOINCREMENT,
                 username      TEXT NOT NULL UNIQUE COLLATE NOCASE,
                 password_hash TEXT NOT NULL,
+                share_id      TEXT NOT NULL UNIQUE DEFAULT (hex(randomblob(8))),
                 created_at    TEXT NOT NULL DEFAULT (datetime('now'))
             );
 
@@ -116,16 +117,28 @@ impl Db {
             CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
             CREATE INDEX IF NOT EXISTS idx_strava_athlete ON strava_tokens(athlete_id);"
         )?;
+
+        // Migration: add share_id to existing users table if missing
+        let has_share_id: bool = conn
+            .prepare("SELECT share_id FROM users LIMIT 0")
+            .is_ok();
+        if !has_share_id {
+            conn.execute_batch(
+                "ALTER TABLE users ADD COLUMN share_id TEXT UNIQUE DEFAULT (hex(randomblob(8)));
+                 UPDATE users SET share_id = hex(randomblob(8)) WHERE share_id IS NULL;"
+            )?;
+        }
+
         Ok(())
     }
 
     // ── Users ──
 
-    pub fn create_user(&self, username: &str, password_hash: &str) -> anyhow::Result<i64> {
+    pub fn create_user(&self, username: &str, password_hash: &str, share_id: &str) -> anyhow::Result<i64> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO users (username, password_hash) VALUES (?1, ?2)",
-            params![username, password_hash],
+            "INSERT INTO users (username, password_hash, share_id) VALUES (?1, ?2, ?3)",
+            params![username, password_hash, share_id],
         )?;
         Ok(conn.last_insert_rowid())
     }
@@ -142,6 +155,43 @@ impl Db {
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(e.into()),
         }
+    }
+
+    pub fn get_user_by_share_id(&self, share_id: &str) -> anyhow::Result<Option<i64>> {
+        let conn = self.conn.lock().unwrap();
+        let result = conn.query_row(
+            "SELECT id FROM users WHERE share_id = ?1",
+            params![share_id],
+            |row| row.get(0),
+        );
+        match result {
+            Ok(id) => Ok(Some(id)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    pub fn get_share_id(&self, user_id: i64) -> anyhow::Result<Option<String>> {
+        let conn = self.conn.lock().unwrap();
+        let result = conn.query_row(
+            "SELECT share_id FROM users WHERE id = ?1",
+            params![user_id],
+            |row| row.get(0),
+        );
+        match result {
+            Ok(s) => Ok(Some(s)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    pub fn regenerate_share_id(&self, user_id: i64, new_share_id: &str) -> anyhow::Result<bool> {
+        let conn = self.conn.lock().unwrap();
+        let n = conn.execute(
+            "UPDATE users SET share_id = ?2 WHERE id = ?1",
+            params![user_id, new_share_id],
+        )?;
+        Ok(n > 0)
     }
 
     pub fn get_user_by_username(&self, username: &str) -> anyhow::Result<Option<(i64, String)>> {
