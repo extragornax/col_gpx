@@ -77,6 +77,15 @@
     padding:3px 8px; border:1px solid var(--ink); background:var(--paper); cursor:pointer; color:var(--ink); }
   .sort-btn.active { background:var(--ink); color:var(--paper); }
 
+  /* ── strava ── */
+  .strava-section { margin-top:24px; border:1px solid var(--ink); padding:20px; background:var(--paper-2); }
+  .strava-section h3 { font-family:"Bricolage Grotesque",sans-serif; font-size:18px; margin:0 0 8px; }
+  .strava-section .status { font-family:"Space Mono",monospace; font-size:12px; color:var(--ink-soft); margin-bottom:12px; }
+  .strava-section .status .connected { color:var(--teal); }
+  .strava-section .btns { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .btn.strava { background:#FC4C02; color:white; border-color:#FC4C02; }
+  .sync-status { font-family:"Space Mono",monospace; font-size:12px; color:var(--teal); margin-top:8px; }
+
   /* ── rename dialog ── */
   .rename-overlay { position:fixed; inset:0; background:rgba(14,20,36,.5); z-index:100; display:flex; align-items:center; justify-content:center; }
   .rename-box { background:var(--paper); border:1px solid var(--ink); padding:24px; max-width:400px; width:90%; }
@@ -115,6 +124,13 @@
       </div>
       <div id="climb-list"><div class="empty">Upload GPX files to populate your climb catalog.</div></div>
     </div>
+  </div>
+
+  <div class="strava-section" id="strava-section" style="display:none">
+    <h3>Strava</h3>
+    <div class="status" id="strava-status"></div>
+    <div class="btns" id="strava-btns"></div>
+    <div class="sync-status" id="sync-status"></div>
   </div>
 
   <div class="actions">
@@ -320,7 +336,57 @@ document.getElementById('reset-btn').addEventListener('click', async () => {
   }
 });
 
+// Strava
+async function loadStrava() {
+  const res = await fetch('/api/strava/status');
+  if (!res.ok) return;
+  const data = await res.json();
+  if (!data.configured) return;
+
+  const section = document.getElementById('strava-section');
+  section.style.display = '';
+  const statusEl = document.getElementById('strava-status');
+  const btnsEl = document.getElementById('strava-btns');
+
+  if (data.connected) {
+    statusEl.innerHTML = `<span class="connected">Connected</span>${data.athlete_name ? ` as ${data.athlete_name}` : ''}`;
+    btnsEl.innerHTML = `
+      <button class="btn small" id="strava-sync">Sync rides</button>
+      <button class="btn danger small" id="strava-disconnect">Disconnect</button>
+    `;
+    document.getElementById('strava-sync').addEventListener('click', syncStrava);
+    document.getElementById('strava-disconnect').addEventListener('click', disconnectStrava);
+  } else {
+    statusEl.textContent = 'Not connected';
+    btnsEl.innerHTML = '<a class="btn strava small" href="/auth/strava">Connect with Strava</a>';
+  }
+}
+
+async function syncStrava() {
+  const syncStatus = document.getElementById('sync-status');
+  const syncBtn = document.getElementById('strava-sync');
+  syncBtn.disabled = true;
+  syncStatus.textContent = 'Syncing…';
+
+  const res = await fetch('/api/strava/sync', { method: 'POST' });
+  if (res.ok) {
+    const data = await res.json();
+    syncStatus.textContent = `Done — ${data.activities_synced} activities, ${data.climbs_found} climbs found.`;
+    loadData();
+  } else {
+    syncStatus.textContent = `Error: ${await res.text()}`;
+  }
+  syncBtn.disabled = false;
+}
+
+async function disconnectStrava() {
+  if (!confirm('Disconnect Strava? Synced climbs will remain.')) return;
+  const res = await fetch('/api/strava', { method: 'DELETE' });
+  if (res.ok) loadStrava();
+}
+
 loadData();
+loadStrava();
 </script>
 </body>
 </html>

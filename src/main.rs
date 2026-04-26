@@ -1,11 +1,13 @@
 mod climb;
 mod db;
 mod routes;
+mod strava;
 
 use std::sync::Arc;
 
 pub struct AppState {
     pub db: db::Db,
+    pub strava: Option<strava::StravaConfig>,
 }
 
 pub type SharedState = Arc<AppState>;
@@ -27,7 +29,14 @@ async fn main() -> anyhow::Result<()> {
     let db = db::Db::open(&db_path)?;
     db.migrate()?;
 
-    let state: SharedState = Arc::new(AppState { db });
+    let strava = strava::StravaConfig::from_env();
+    if strava.is_some() {
+        tracing::info!("Strava integration enabled");
+    } else {
+        tracing::info!("Strava integration disabled (set STRAVA_CLIENT_ID + STRAVA_CLIENT_SECRET to enable)");
+    }
+
+    let state: SharedState = Arc::new(AppState { db, strava });
 
     let app = routes::router().with_state(state);
 

@@ -9,6 +9,9 @@ services:
       PORT: "3000"
       DB_PATH: "/data/col.db"
       RUST_LOG: "info,col_gpx=debug"
+      BASE_URL: "https://col.extragornax.fr"
+      STRAVA_CLIENT_ID: "${STRAVA_CLIENT_ID}"
+      STRAVA_CLIENT_SECRET: "${STRAVA_CLIENT_SECRET}"
     volumes:
       - col_data:/data
     restart: unless-stopped

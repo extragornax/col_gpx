@@ -41,6 +41,14 @@ pub struct Stats {
     pub most_ridden_count: i64,
 }
 
+pub struct StravaTokens {
+    pub access_token: String,
+    pub refresh_token: String,
+    pub expires_at: i64,
+    pub athlete_id: i64,
+    pub athlete_name: Option<String>,
+}
+
 impl Db {
     pub fn open(path: &str) -> anyhow::Result<Self> {
         let conn = Connection::open(path)?;
@@ -76,7 +84,20 @@ impl Db {
             );
 
             CREATE INDEX IF NOT EXISTS idx_climbs_loc ON climbs(lat, lon);
-            CREATE INDEX IF NOT EXISTS idx_attempts_climb ON attempts(climb_id);"
+            CREATE INDEX IF NOT EXISTS idx_attempts_climb ON attempts(climb_id);
+
+            CREATE TABLE IF NOT EXISTS strava_tokens (
+                id              INTEGER PRIMARY KEY CHECK (id = 1),
+                access_token    TEXT NOT NULL,
+                refresh_token   TEXT NOT NULL,
+                expires_at      INTEGER NOT NULL,
+                athlete_id      INTEGER NOT NULL,
+                athlete_name    TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS synced_activities (
+                strava_id       INTEGER PRIMARY KEY
+            );"
         )?;
         Ok(())
     }
@@ -260,6 +281,68 @@ impl Db {
             most_ridden_climb: most.0,
             most_ridden_count: most.1,
         })
+    }
+
+    pub fn save_strava_tokens(
+        &self,
+        access_token: &str,
+        refresh_token: &str,
+        expires_at: i64,
+        athlete_id: i64,
+        athlete_name: Option<&str>,
+    ) -> anyhow::Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT OR REPLACE INTO strava_tokens (id, access_token, refresh_token, expires_at, athlete_id, athlete_name)
+             VALUES (1, ?1, ?2, ?3, ?4, ?5)",
+            params![access_token, refresh_token, expires_at, athlete_id, athlete_name],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_strava_tokens(&self) -> anyhow::Result<Option<StravaTokens>> {
+        let conn = self.conn.lock().unwrap();
+        let result = conn.query_row(
+            "SELECT access_token, refresh_token, expires_at, athlete_id, athlete_name FROM strava_tokens WHERE id = 1",
+            [],
+            |row| Ok(StravaTokens {
+                access_token: row.get(0)?,
+                refresh_token: row.get(1)?,
+                expires_at: row.get(2)?,
+                athlete_id: row.get(3)?,
+                athlete_name: row.get(4)?,
+            }),
+        );
+        match result {
+            Ok(t) => Ok(Some(t)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    pub fn delete_strava_tokens(&self) -> anyhow::Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute_batch("DELETE FROM strava_tokens; DELETE FROM synced_activities;")?;
+        Ok(())
+    }
+
+    pub fn is_activity_synced(&self, strava_id: i64) -> anyhow::Result<bool> {
+        let conn = self.conn.lock().unwrap();
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM synced_activities WHERE strava_id = ?1",
+            params![strava_id],
+            |r| r.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
+    pub fn mark_activity_synced(&self, strava_id: i64) -> anyhow::Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT OR IGNORE INTO synced_activities (strava_id) VALUES (?1)",
+            params![strava_id],
+        )?;
+        Ok(())
     }
 
     pub fn clear_all(&self) -> anyhow::Result<()> {
