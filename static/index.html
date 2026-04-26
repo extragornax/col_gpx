@@ -30,6 +30,18 @@
   .hdr h1 { font-family:"Bricolage Grotesque",sans-serif; font-weight:800; font-size:clamp(32px,5vw,52px); letter-spacing:-0.03em; margin:0; }
   .hdr h1 em { font-family:"Fraunces",serif; font-style:italic; font-weight:400; color:var(--teal); }
   .hdr .sub { font-family:"Space Mono",monospace; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-soft); }
+  .hdr .user-info { font-family:"Space Mono",monospace; font-size:11px; display:flex; align-items:center; gap:8px; }
+
+  /* ── auth ── */
+  .auth-gate { max-width:380px; margin:60px auto; }
+  .auth-gate h2 { font-family:"Bricolage Grotesque",sans-serif; font-size:28px; margin:0 0 24px; text-align:center; }
+  .auth-gate .tabs { display:flex; border-bottom:1px solid var(--rule); margin-bottom:20px; }
+  .auth-gate .tab { flex:1; text-align:center; font-family:"Space Mono",monospace; font-size:12px; letter-spacing:.08em; text-transform:uppercase;
+    padding:10px; cursor:pointer; border-bottom:2px solid transparent; color:var(--ink-soft); }
+  .auth-gate .tab.active { color:var(--ink); border-bottom-color:var(--mustard); }
+  .auth-form { display:flex; flex-direction:column; gap:12px; }
+  .auth-form input { font-family:"Space Mono",monospace; font-size:14px; padding:10px 12px; border:1px solid var(--ink); background:var(--paper-2); }
+  .auth-form .error { font-family:"Space Mono",monospace; font-size:12px; color:var(--vermilion); }
 
   /* ── stats bar ── */
   .stats { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:24px; }
@@ -92,6 +104,8 @@
   .rename-box h3 { font-family:"Bricolage Grotesque",sans-serif; margin:0 0 12px; font-size:18px; }
   .rename-box input { width:100%; font-family:"Space Mono",monospace; font-size:14px; padding:8px 10px; border:1px solid var(--ink); background:var(--paper-2); margin-bottom:12px; }
   .rename-box .btns { display:flex; gap:8px; justify-content:flex-end; }
+
+  .hidden { display:none !important; }
 </style>
 </head>
 <body>
@@ -99,67 +113,198 @@
 
   <header class="hdr">
     <h1>C<em>o</em>l</h1>
-    <span class="sub">personal climb catalog — col.extragornax.fr</span>
+    <div id="hdr-right">
+      <span class="sub">personal climb catalog</span>
+    </div>
   </header>
 
-  <div class="stats" id="stats">
-    <div class="stat"><div class="val" id="s-climbs">—</div><div class="lbl">unique climbs</div></div>
-    <div class="stat"><div class="val" id="s-attempts">—</div><div class="lbl">total attempts</div></div>
-    <div class="stat"><div class="val" id="s-gain">—</div><div class="lbl">total D+ (m)</div></div>
-    <div class="stat"><div class="val" id="s-highest">—</div><div class="lbl">highest (m)</div></div>
-    <div class="stat"><div class="val" id="s-steepest">—</div><div class="lbl">steepest (%)</div></div>
+  <!-- Auth gate -->
+  <div class="auth-gate" id="auth-gate">
+    <h2>C<em style="font-family:Fraunces,serif;font-style:italic;font-weight:400;color:var(--teal)">o</em>l</h2>
+    <div class="tabs">
+      <div class="tab active" data-tab="login">Log in</div>
+      <div class="tab" data-tab="register">Register</div>
+    </div>
+    <form class="auth-form" id="auth-form">
+      <input type="text" id="auth-username" placeholder="Username" autocomplete="username" required>
+      <input type="password" id="auth-password" placeholder="Password" autocomplete="current-password" required>
+      <button class="btn" type="submit" id="auth-submit">Log in</button>
+      <div class="error hidden" id="auth-error"></div>
+    </form>
   </div>
 
-  <div class="content">
-    <div id="map"></div>
-    <div class="panel" id="panel">
-      <div class="panel-head">
-        <span>Climbs</span>
-        <div class="sort-bar">
-          <button class="sort-btn active" data-sort="gain">D+</button>
-          <button class="sort-btn" data-sort="gradient">%</button>
-          <button class="sort-btn" data-sort="times">×</button>
-          <button class="sort-btn" data-sort="name">A-Z</button>
+  <!-- App (hidden until authenticated) -->
+  <div id="app" class="hidden">
+
+    <div class="stats" id="stats">
+      <div class="stat"><div class="val" id="s-climbs">&mdash;</div><div class="lbl">unique climbs</div></div>
+      <div class="stat"><div class="val" id="s-attempts">&mdash;</div><div class="lbl">total attempts</div></div>
+      <div class="stat"><div class="val" id="s-gain">&mdash;</div><div class="lbl">total D+ (m)</div></div>
+      <div class="stat"><div class="val" id="s-highest">&mdash;</div><div class="lbl">highest (m)</div></div>
+      <div class="stat"><div class="val" id="s-steepest">&mdash;</div><div class="lbl">steepest (%)</div></div>
+    </div>
+
+    <div class="content">
+      <div id="map"></div>
+      <div class="panel" id="panel">
+        <div class="panel-head">
+          <span>Climbs</span>
+          <div class="sort-bar">
+            <button class="sort-btn active" data-sort="gain">D+</button>
+            <button class="sort-btn" data-sort="gradient">%</button>
+            <button class="sort-btn" data-sort="times">&times;</button>
+            <button class="sort-btn" data-sort="name">A-Z</button>
+          </div>
         </div>
+        <div id="climb-list"><div class="empty">Upload GPX files to populate your climb catalog.</div></div>
       </div>
-      <div id="climb-list"><div class="empty">Upload GPX files to populate your climb catalog.</div></div>
     </div>
-  </div>
 
-  <div class="strava-section" id="strava-section" style="display:none">
-    <h3>Strava</h3>
-    <div class="status" id="strava-status"></div>
-    <div class="btns" id="strava-btns"></div>
-    <div class="sync-status" id="sync-status"></div>
-  </div>
+    <div class="strava-section" id="strava-section" style="display:none">
+      <h3>Strava</h3>
+      <div class="status" id="strava-status"></div>
+      <div class="btns" id="strava-btns"></div>
+      <div class="sync-status" id="sync-status"></div>
+    </div>
 
-  <div class="actions">
-    <div class="upload" id="drop-zone">
-      <h3>Add rides</h3>
-      <p>Drop GPX files here, or click to pick. Each file is scanned for climbs (≥ 50 m gain, ≥ 1% avg gradient).</p>
-      <label class="btn">
-        Choose GPX files
-        <input type="file" id="file-input" accept=".gpx" multiple>
-      </label>
-      <div class="upload-status" id="upload-status"></div>
+    <div class="actions">
+      <div class="upload" id="drop-zone">
+        <h3>Add rides</h3>
+        <p>Drop GPX files here, or click to pick. Each file is scanned for climbs (&ge; 50 m gain, &ge; 1% avg gradient).</p>
+        <label class="btn">
+          Choose GPX files
+          <input type="file" id="file-input" accept=".gpx" multiple>
+        </label>
+        <div class="upload-status" id="upload-status"></div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <button class="btn danger small" id="reset-btn">Reset all data</button>
+      </div>
     </div>
-    <div style="display:flex; flex-direction:column; gap:8px;">
-      <button class="btn danger small" id="reset-btn">Reset all data</button>
-    </div>
+
   </div>
 
 </div>
 
 <script>
-const map = L.map('map').setView([46.8, 2.3], 6);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '&copy; OpenStreetMap',
-  maxZoom: 18,
-}).addTo(map);
-
-const markers = L.layerGroup().addTo(map);
+let mapInstance = null;
+let markers = null;
 let climbs = [];
 let currentSort = 'gain';
+let currentUser = null;
+let authMode = 'login';
+
+const $  = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+
+// Detect public profile mode from URL
+const publicMatch = location.pathname.match(/^\/p\/([^/]+)$/);
+const publicUsername = publicMatch ? decodeURIComponent(publicMatch[1]) : null;
+
+// ── Auth ──
+
+$$('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    $$('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    authMode = tab.dataset.tab;
+    $('#auth-submit').textContent = authMode === 'login' ? 'Log in' : 'Register';
+    $('#auth-password').autocomplete = authMode === 'login' ? 'current-password' : 'new-password';
+    $('#auth-error').classList.add('hidden');
+  });
+});
+
+$('#auth-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const username = $('#auth-username').value.trim();
+  const password = $('#auth-password').value;
+  if (!username || !password) return;
+
+  const errEl = $('#auth-error');
+  errEl.classList.add('hidden');
+
+  const endpoint = authMode === 'login' ? '/api/login' : '/api/register';
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+
+  if (res.ok) {
+    const data = await res.json();
+    showApp(data.username);
+  } else {
+    errEl.textContent = await res.text();
+    errEl.classList.remove('hidden');
+  }
+});
+
+async function checkSession() {
+  const res = await fetch('/api/me');
+  if (res.ok) {
+    const data = await res.json();
+    showApp(data.username);
+  } else {
+    $('#auth-gate').classList.remove('hidden');
+    $('#app').classList.add('hidden');
+  }
+}
+
+function showApp(username) {
+  currentUser = username;
+  $('#auth-gate').classList.add('hidden');
+  $('#app').classList.remove('hidden');
+  const shareUrl = `${location.origin}/p/${encodeURIComponent(username)}`;
+  $('#hdr-right').innerHTML = `
+    <span class="user-info">
+      <span>${username}</span>
+      <button class="btn small" id="share-btn" title="${shareUrl}">Share link</button>
+      <button class="btn small" id="logout-btn">Logout</button>
+    </span>
+  `;
+  $('#share-btn').addEventListener('click', () => {
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      $('#share-btn').textContent = 'Copied!';
+      setTimeout(() => { $('#share-btn').textContent = 'Share link'; }, 2000);
+    });
+  });
+  $('#logout-btn').addEventListener('click', async () => {
+    await fetch('/api/logout', { method: 'POST' });
+    location.reload();
+  });
+  initMap();
+  loadData();
+  loadStrava();
+}
+
+function showPublicProfile(username) {
+  $('#auth-gate').classList.add('hidden');
+  $('#app').classList.remove('hidden');
+  $('#hdr-right').innerHTML = `
+    <span class="sub">${username}'s climbs</span>
+  `;
+  // Hide owner-only controls
+  const actions = document.querySelector('.actions');
+  if (actions) actions.style.display = 'none';
+  const stravaSection = $('#strava-section');
+  if (stravaSection) stravaSection.style.display = 'none';
+  initMap();
+  loadData();
+}
+
+// ── Map ──
+
+function initMap() {
+  if (mapInstance) return;
+  mapInstance = L.map('map').setView([46.8, 2.3], 6);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap',
+    maxZoom: 18,
+  }).addTo(mapInstance);
+  markers = L.layerGroup().addTo(mapInstance);
+}
+
+// ── Helpers ──
 
 function fmt(n, d=0) { return n == null ? '—' : Number(n).toFixed(d); }
 function climbLabel(c) { return c.name || `Climb #${c.id} (${fmt(c.end_ele,0)} m)`; }
@@ -194,8 +339,8 @@ function renderClimbs() {
         <span class="name">${climbLabel(c)}</span>
         ${dateStr ? `<div class="date">${dateStr}</div>` : ''}
       </div>
-      <span class="info">${fmt(c.gain,0)} m · ${fmt(c.gradient,1)}% · ${fmt(c.distance_km,1)} km</span>
-      <span class="badge">${c.times_ridden}×</span>
+      <span class="info">${fmt(c.gain,0)} m &middot; ${fmt(c.gradient,1)}% &middot; ${fmt(c.distance_km,1)} km</span>
+      <span class="badge">${c.times_ridden}&times;</span>
     </div>
   `}).join('');
 
@@ -206,48 +351,50 @@ function renderClimbs() {
       radius: Math.min(4 + c.times_ridden * 2, 14),
       color, fillColor: color, fillOpacity: 0.7, weight: 1,
     }).addTo(markers);
-    m.bindPopup(`<b>${climbLabel(c)}</b><br>${fmt(c.gain,0)} m D+ · ${fmt(c.gradient,1)}% · ${fmt(c.distance_km,1)} km<br>${c.times_ridden} attempt${c.times_ridden>1?'s':''}<br><small>${c.first_ridden || ''}</small>`);
+    m.bindPopup(`<b>${climbLabel(c)}</b><br>${fmt(c.gain,0)} m D+ &middot; ${fmt(c.gradient,1)}% &middot; ${fmt(c.distance_km,1)} km<br>${c.times_ridden} attempt${c.times_ridden>1?'s':''}<br><small>${c.first_ridden || ''}</small>`);
     bounds.push([c.lat, c.lon]);
   });
 
-  if (bounds.length) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 12 });
+  if (bounds.length) mapInstance.fitBounds(bounds, { padding: [30, 30], maxZoom: 12 });
 }
 
 function renderStats(s) {
-  document.getElementById('s-climbs').textContent = s.total_climbs;
-  document.getElementById('s-attempts').textContent = s.total_attempts;
-  document.getElementById('s-gain').textContent = fmt(s.total_gain_m, 0);
-  document.getElementById('s-highest').textContent = fmt(s.highest_climb_m, 0);
-  document.getElementById('s-steepest').textContent = fmt(s.steepest_gradient, 1);
+  $('#s-climbs').textContent = s.total_climbs;
+  $('#s-attempts').textContent = s.total_attempts;
+  $('#s-gain').textContent = fmt(s.total_gain_m, 0);
+  $('#s-highest').textContent = fmt(s.highest_climb_m, 0);
+  $('#s-steepest').textContent = fmt(s.steepest_gradient, 1);
 }
 
 async function loadData() {
+  const base = publicUsername ? `/api/public/${encodeURIComponent(publicUsername)}` : '/api';
   const [climbRes, statsRes] = await Promise.all([
-    fetch('/api/climbs'), fetch('/api/stats')
+    fetch(`${base}/climbs`), fetch(`${base}/stats`)
   ]);
   if (climbRes.ok) { climbs = await climbRes.json(); renderClimbs(); }
   if (statsRes.ok) renderStats(await statsRes.json());
 }
 
 // Sort buttons
-document.querySelectorAll('.sort-btn').forEach(btn => {
+$$('.sort-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+    $$('.sort-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     currentSort = btn.dataset.sort;
     renderClimbs();
   });
 });
 
-// Click climb row → fly to marker
-document.getElementById('climb-list').addEventListener('click', e => {
+// Click climb row -> fly to marker
+$('#climb-list').addEventListener('click', e => {
   const row = e.target.closest('.climb-row');
   if (!row) return;
-  map.flyTo([+row.dataset.lat, +row.dataset.lon], 13, { duration: 0.8 });
+  mapInstance.flyTo([+row.dataset.lat, +row.dataset.lon], 13, { duration: 0.8 });
 });
 
-// Double-click climb row → rename
-document.getElementById('climb-list').addEventListener('dblclick', e => {
+// Double-click climb row -> rename (owner only)
+$('#climb-list').addEventListener('dblclick', e => {
+  if (publicUsername) return;
   const row = e.target.closest('.climb-row');
   if (!row) return;
   const id = row.dataset.id;
@@ -298,7 +445,7 @@ document.getElementById('climb-list').addEventListener('dblclick', e => {
 // Upload
 const dropZone = document.getElementById('drop-zone');
 const fileInput = document.getElementById('file-input');
-const status = document.getElementById('upload-status');
+const uploadStatus = document.getElementById('upload-status');
 
 ['dragenter','dragover'].forEach(ev => dropZone.addEventListener(ev, e => { e.preventDefault(); dropZone.classList.add('drag'); }));
 ['dragleave','drop'].forEach(ev => dropZone.addEventListener(ev, () => dropZone.classList.remove('drag')));
@@ -308,7 +455,7 @@ fileInput.addEventListener('change', () => handleFiles(fileInput.files));
 
 async function handleFiles(files) {
   if (!files.length) return;
-  status.textContent = `Uploading ${files.length} file${files.length>1?'s':''}…`;
+  uploadStatus.textContent = `Uploading ${files.length} file${files.length>1?'s':''}...`;
 
   const form = new FormData();
   for (const f of files) form.append('file', f);
@@ -316,23 +463,23 @@ async function handleFiles(files) {
   const res = await fetch('/api/upload/gpx', { method: 'POST', body: form });
   if (res.ok) {
     const data = await res.json();
-    status.textContent = `Done — ${data.climbs_processed} climb${data.climbs_processed!==1?'s':''} processed.`;
+    uploadStatus.textContent = `Done — ${data.climbs_processed} climb${data.climbs_processed!==1?'s':''} processed.`;
     loadData();
   } else {
-    status.textContent = `Error: ${await res.text()}`;
+    uploadStatus.textContent = `Error: ${await res.text()}`;
   }
   fileInput.value = '';
 }
 
 // Reset
-document.getElementById('reset-btn').addEventListener('click', async () => {
+$('#reset-btn').addEventListener('click', async () => {
   if (!confirm('Delete all climbs and attempts? This cannot be undone.')) return;
   const res = await fetch('/api/reset', { method: 'POST' });
   if (res.ok) {
     climbs = [];
     renderClimbs();
     renderStats({ total_climbs: 0, total_attempts: 0, total_gain_m: 0, highest_climb_m: 0, steepest_gradient: 0 });
-    document.getElementById('upload-status').textContent = 'All data cleared.';
+    uploadStatus.textContent = 'All data cleared.';
   }
 });
 
@@ -343,10 +490,10 @@ async function loadStrava() {
   const data = await res.json();
   if (!data.configured) return;
 
-  const section = document.getElementById('strava-section');
+  const section = $('#strava-section');
   section.style.display = '';
-  const statusEl = document.getElementById('strava-status');
-  const btnsEl = document.getElementById('strava-btns');
+  const statusEl = $('#strava-status');
+  const btnsEl = $('#strava-btns');
 
   if (data.connected) {
     statusEl.innerHTML = `<span class="connected">Connected</span>${data.athlete_name ? ` as ${data.athlete_name}` : ''}`;
@@ -354,8 +501,8 @@ async function loadStrava() {
       <button class="btn small" id="strava-sync">Sync rides</button>
       <button class="btn danger small" id="strava-disconnect">Disconnect</button>
     `;
-    document.getElementById('strava-sync').addEventListener('click', syncStrava);
-    document.getElementById('strava-disconnect').addEventListener('click', disconnectStrava);
+    $('#strava-sync').addEventListener('click', syncStrava);
+    $('#strava-disconnect').addEventListener('click', disconnectStrava);
   } else {
     statusEl.textContent = 'Not connected';
     btnsEl.innerHTML = '<a class="btn strava small" href="/auth/strava">Connect with Strava</a>';
@@ -363,18 +510,17 @@ async function loadStrava() {
 }
 
 async function syncStrava() {
-  const syncStatus = document.getElementById('sync-status');
-  const syncBtn = document.getElementById('strava-sync');
+  const syncStatusEl = $('#sync-status');
+  const syncBtn = $('#strava-sync');
   syncBtn.disabled = true;
-  syncStatus.textContent = 'Syncing…';
+  syncStatusEl.textContent = 'Sync started in background...';
 
   const res = await fetch('/api/strava/sync', { method: 'POST' });
   if (res.ok) {
-    const data = await res.json();
-    syncStatus.textContent = `Done — ${data.activities_synced} activities, ${data.climbs_found} climbs found.`;
-    loadData();
+    syncStatusEl.textContent = 'Sync running in background. Refresh in a minute to see new climbs.';
+    setTimeout(() => loadData(), 30000);
   } else {
-    syncStatus.textContent = `Error: ${await res.text()}`;
+    syncStatusEl.textContent = `Error: ${await res.text()}`;
   }
   syncBtn.disabled = false;
 }
@@ -385,8 +531,12 @@ async function disconnectStrava() {
   if (res.ok) loadStrava();
 }
 
-loadData();
-loadStrava();
+// Boot
+if (publicUsername) {
+  showPublicProfile(publicUsername);
+} else {
+  checkSession();
+}
 </script>
 </body>
 </html>

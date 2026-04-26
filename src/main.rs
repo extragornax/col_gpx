@@ -1,3 +1,4 @@
+mod auth;
 mod climb;
 mod db;
 mod routes;

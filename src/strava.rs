@@ -5,6 +5,7 @@ pub struct StravaConfig {
     pub client_id: String,
     pub client_secret: String,
     pub base_url: String,
+    pub webhook_verify_token: String,
 }
 
 impl StravaConfig {
@@ -12,7 +13,9 @@ impl StravaConfig {
         let client_id = std::env::var("STRAVA_CLIENT_ID").ok()?;
         let client_secret = std::env::var("STRAVA_CLIENT_SECRET").ok()?;
         let base_url = std::env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:3000".into());
-        Some(Self { client_id, client_secret, base_url })
+        let webhook_verify_token = std::env::var("STRAVA_WEBHOOK_VERIFY_TOKEN")
+            .unwrap_or_else(|_| format!("col-verify-{}", &client_secret[..8.min(client_secret.len())]));
+        Some(Self { client_id, client_secret, base_url, webhook_verify_token })
     }
 
     pub fn authorize_url(&self) -> String {
@@ -158,4 +161,14 @@ pub async fn fetch_streams(access_token: &str, activity_id: i64) -> anyhow::Resu
         .collect();
 
     Ok(Some(profile))
+}
+
+pub async fn fetch_activity(access_token: &str, activity_id: i64) -> anyhow::Result<Option<StravaActivity>> {
+    let client = reqwest::Client::new();
+    let url = format!("https://www.strava.com/api/v3/activities/{activity_id}");
+    let resp = client.get(&url).bearer_auth(access_token).send().await?;
+    if resp.status() == reqwest::StatusCode::NOT_FOUND {
+        return Ok(None);
+    }
+    Ok(Some(resp.error_for_status()?.json().await?))
 }
