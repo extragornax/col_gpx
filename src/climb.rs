@@ -130,12 +130,11 @@ pub fn profile_from_gpx(xml: &[u8]) -> anyhow::Result<GpxProfile> {
     let mut prev: Option<(f64, f64)> = None;
     let mut first_time: Option<String> = None;
 
-    if let Some(ref meta) = gpx.metadata {
-        if let Some(ref t) = meta.time {
-            if let Ok(s) = t.format() {
-                first_time = Some(s[..10].to_string());
-            }
-        }
+    if let Some(ref meta) = gpx.metadata
+        && let Some(ref t) = meta.time
+        && let Ok(s) = t.format()
+    {
+        first_time = Some(s[..10].to_string());
     }
 
     for track in &gpx.tracks {
@@ -145,12 +144,11 @@ pub fn profile_from_gpx(xml: &[u8]) -> anyhow::Result<GpxProfile> {
                 let lon = pt.point().x();
                 let ele = pt.elevation.unwrap_or(0.0);
 
-                if first_time.is_none() {
-                    if let Some(ref t) = pt.time {
-                        if let Ok(s) = t.format() {
-                            first_time = Some(s[..10].to_string());
-                        }
-                    }
+                if first_time.is_none()
+                    && let Some(ref t) = pt.time
+                    && let Ok(s) = t.format()
+                {
+                    first_time = Some(s[..10].to_string());
                 }
 
                 if let Some((plat, plon)) = prev {
